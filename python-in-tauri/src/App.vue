@@ -81,13 +81,15 @@ import { ref, computed, onMounted } from 'vue';
 import ApiTranslation from './components/ApiTranslation.vue';
 import Settings from './components/Settings.vue';
 import BatchFileTranslation from './components/BatchFileTranslation.vue';
+import BatchTextReplace from './components/BatchTextReplace.vue';
 
 export default {
   name: 'App',
   components: {
     ApiTranslation,
     Settings,
-    BatchFileTranslation
+    BatchFileTranslation,
+    BatchTextReplace
   },
   setup() {
     const currentTab = ref('api');
@@ -98,6 +100,7 @@ export default {
     const tabs = [
       { id: 'api', label: '智能翻译', component: ApiTranslation, icon: '🤖' },
       { id: 'batch', label: '批量翻译', component: BatchFileTranslation, icon: '📁' },
+      { id: 'replace', label: '批量文本替换', component: BatchTextReplace, icon: '🔄' },
       { id: 'settings', label: '设置', component: Settings, icon: '⚙️' }
     ];
     
