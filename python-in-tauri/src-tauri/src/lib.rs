@@ -191,11 +191,11 @@ fn start_python_server(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error:
     cmd.arg(&backend_main);
     cmd.current_dir(&backend_dir);
 
-    // #[cfg(windows)]
-    // {
-    //     use std::os::windows::process::CommandExt;
-    //     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    // }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
 
     let child_result = cmd.spawn();
 

@@ -4,7 +4,9 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <div class="logo-icon">📓</div>
+          <div class="logo-icon">
+            <img src="./assets/512.png" alt="Logo" />
+          </div>
           <div class="logo-text">
             <h1>无道翻译</h1>
             <p>AI驱动的实时翻译</p>
@@ -15,7 +17,7 @@
       <nav class="nav-menu">
         <div v-for="tab in tabs" :key="tab.id" class="nav-item" :class="{ active: currentTab === tab.id }"
           @click="switchTab(tab.id)">
-          <span class="nav-icon">{{ tab.icon }}</span>
+          <!-- <span class="nav-icon">{{ tab.icon }}</span> -->
           <span class="nav-label">{{ tab.label }}</span>
         </div>
       </nav>
@@ -85,11 +87,11 @@ export default {
     const backendError = ref(null);
 
     const tabs = [
-      { id: 'api', label: '智能翻译', component: ApiTranslation, icon: '🤖' },
-      { id: 'batch', label: '批量翻译', component: BatchFileTranslation, icon: '📁' },
-      { id: 'pdf', label: 'PDF翻译', component: BatchPDFTranslation, icon: '📄' },
-      { id: 'replace', label: '批量文本替换', component: BatchTextReplace, icon: '🔄' },
-      { id: 'settings', label: '设置', component: Settings, icon: '⚙️' }
+      { id: 'api', label: '智能翻译', component: ApiTranslation },
+      { id: 'batch', label: '批量翻译', component: BatchFileTranslation },
+      { id: 'pdf', label: 'PDF翻译', component: BatchPDFTranslation },
+      { id: 'replace', label: '批量文本替换', component: BatchTextReplace },
+      { id: 'settings', label: '设置', component: Settings }
     ];
 
     const currentComponent = computed(() => {
@@ -255,16 +257,24 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  background: linear-gradient(135deg, var(--primary-color), #ff4d4d);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
+  overflow: hidden;
+  padding: 0;
+}
+
+.logo-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .logo-text h1 {
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0 0 4px 0;
-  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  background: linear-gradient(135deg, var(--primary-color), #ff4d4d);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -414,7 +424,7 @@ export default {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  background: linear-gradient(135deg, var(--primary-color), #ff4d4d);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -498,7 +508,7 @@ export default {
 
 .card-title .icon {
   font-size: 1.5rem;
-  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  background: linear-gradient(135deg, var(--primary-color), #ff4d4d);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -579,13 +589,13 @@ export default {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  background: linear-gradient(135deg, var(--primary-color), #ff4d4d);
   color: white;
   box-shadow: var(--shadow-md);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, var(--primary-hover), #7c3aed);
+  background: linear-gradient(135deg, var(--primary-hover), #e03131);
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
 }

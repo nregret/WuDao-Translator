@@ -1,13 +1,16 @@
 /* 全局样式重置和现代化设计 */
 
 /* CSS Reset */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -29,9 +32,9 @@ html, body {
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  --primary-color: #6366f1;
-  --primary-hover: #4f46e5;
-  --primary-light: rgba(99, 102, 241, 0.1);
+  --primary-color: #CA0909;
+  --primary-hover: #A00707;
+  --primary-light: rgba(202, 9, 9, 0.1);
   --success-color: #10b981;
   --error-color: #ef4444;
   --warning-color: #f59e0b;
@@ -57,7 +60,7 @@ html, body {
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
-  --primary-light: rgba(99, 102, 241, 0.2);
+  --primary-light: rgba(202, 9, 9, 0.2);
 }
 
 body {
@@ -97,19 +100,23 @@ body {
 }
 
 /* 动画过渡 */
-.fade-enter-active, .fade-leave-active {
+.fade-enter-active,
+.fade-leave-active {
   transition: opacity 0.3s ease;
 }
 
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 
-.slide-enter-active, .slide-leave-active {
+.slide-enter-active,
+.slide-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.slide-enter-from, .slide-leave-to {
+.slide-enter-from,
+.slide-leave-to {
   transform: translateY(20px);
   opacity: 0;
 }
@@ -176,7 +183,7 @@ body {
   .sm\:flex-col {
     flex-direction: column;
   }
-  
+
   .sm\:gap-2 {
     gap: 0.5rem;
   }
@@ -186,9 +193,9 @@ body {
 @media print {
   body {
     -webkit-print-color-adjust: exact;
-    color-adjust: exact;
+    print-color-adjust: exact;
   }
-  
+
   .sidebar,
   .action-bar {
     display: none;

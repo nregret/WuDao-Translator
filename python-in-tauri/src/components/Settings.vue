@@ -31,9 +31,15 @@
 
         <div class="setting-group">
           <h3>百度翻译API配置
-            <a href="https://fanyi-api.baidu.com/manage/developer" target="_blank" class="api-link" title="点击跳转获取API">
-              获取免费API &nearr;
-            </a>
+            <div class="header-links">
+              <a href="https://modelscope.cn/models/Tencent-Hunyuan/HY-MT1.5-1.8B-GGUF/files" target="_blank"
+                class="api-link" title="下载离线模型">
+                免费下载AI模型 &nearr;
+              </a>
+              <a href="https://fanyi-api.baidu.com/manage/developer" target="_blank" class="api-link" title="点击跳转获取API">
+                获取免费API &nearr;
+              </a>
+            </div>
           </h3>
           <div class="form-list">
             <div class="form-row">
@@ -146,7 +152,7 @@ export default {
             timeout: 5000,
             auto_copy: false,
             dark_mode: false,
-            theme_color: '#6366f1'
+            theme_color: '#CA0909'
           };
           // 不显示消息，使用默认配置
         }
@@ -210,7 +216,7 @@ export default {
         timeout: 5000,
         auto_copy: false,
         dark_mode: false,
-        theme_color: '#6366f1'
+        theme_color: '#CA0909'
       };
       showMessage('已恢复默认配置，请记得保存', false);
     };
@@ -293,6 +299,12 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.header-links {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .api-link {
@@ -400,6 +412,7 @@ export default {
 
 .input-group input[type="number"] {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .input-group input[type="number"]::-webkit-outer-spin-button,
