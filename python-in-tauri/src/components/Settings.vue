@@ -4,95 +4,63 @@
       <h2 class="card-title">
         <i class="icon">⚙️</i> 系统设置
       </h2>
-      
+
       <div class="settings-content">
         <div class="setting-group">
           <h3>模型配置</h3>
           <div class="form-list">
             <div class="form-row">
               <label for="model-dir" class="form-label">模型文件夹路径</label>
-              <input 
-                id="model-dir" 
-                v-model="config.model_dir" 
-                type="text" 
-                placeholder="请输入模型文件夹路径"
-                @change="saveConfig"
-                class="form-input"
-              />
+              <input id="model-dir" v-model="config.model_dir" type="text" placeholder="请输入模型文件夹路径" @change="saveConfig"
+                class="form-input" />
             </div>
-            
+
             <div class="form-row">
               <label for="context-length" class="form-label">上下文长度</label>
-              <input 
-                id="context-length" 
-                v-model.number="config.context_length" 
-                type="number" 
-                min="512"
-                max="4096"
-                @change="saveConfig"
-                class="form-input"
-              />
+              <input id="context-length" v-model.number="config.context_length" type="number" min="512" max="4096"
+                @change="saveConfig" class="form-input" />
             </div>
-            
+
             <div class="form-row">
               <label for="max-tokens" class="form-label">最大Token数</label>
-              <input 
-                id="max-tokens" 
-                v-model.number="config.max_tokens" 
-                type="number" 
-                min="128"
-                max="1024"
-                @change="saveConfig"
-                class="form-input"
-              />
+              <input id="max-tokens" v-model.number="config.max_tokens" type="number" min="128" max="1024"
+                @change="saveConfig" class="form-input" />
             </div>
           </div>
         </div>
-        
+
         <div class="setting-group">
-          <h3>百度翻译API配置</h3>
+          <h3>百度翻译API配置
+            <a href="https://fanyi-api.baidu.com/manage/developer" target="_blank" class="api-link" title="点击跳转获取API">
+              获取免费API &nearr;
+            </a>
+          </h3>
           <div class="form-list">
             <div class="form-row">
               <label for="baidu-appid" class="form-label">App ID</label>
-              <input 
-                id="baidu-appid" 
-                v-model="config.baidu_appid" 
-                type="text" 
-                placeholder="请输入百度翻译API的App ID"
-                @change="saveConfig"
-                class="form-input"
-              />
+              <input id="baidu-appid" v-model="config.baidu_appid" type="text" placeholder="请输入百度翻译API的App ID"
+                @change="saveConfig" class="form-input" />
             </div>
-            
+
             <div class="form-row">
               <label for="baidu-appkey" class="form-label">App Key</label>
-              <input 
-                id="baidu-appkey" 
-                v-model="config.baidu_appkey" 
-                type="password" 
-                placeholder="请输入百度翻译API的App Key"
-                @change="saveConfig"
-                class="form-input"
-              />
+              <input id="baidu-appkey" v-model="config.baidu_appkey" type="password" placeholder="请输入百度翻译API的App Key"
+                @change="saveConfig" class="form-input" />
             </div>
           </div>
         </div>
-        
+
         <div class="setting-group">
           <h3>辅助功能</h3>
           <div class="checkbox-options">
             <label class="checkbox-group">
-              <input 
-                v-model="config.auto_copy" 
-                type="checkbox"
-                @change="saveConfig"
-              />
+              <input v-model="config.auto_copy" type="checkbox" @change="saveConfig" />
               <span class="checkbox-label">自动复制翻译结果</span>
             </label>
           </div>
         </div>
       </div>
-      
+
       <div class="action-bar">
         <button @click="saveConfig" class="btn btn-primary">
           <span>💾</span> 保存设置
@@ -101,9 +69,9 @@
           <span>🔄</span> 恢复默认
         </button>
       </div>
-      
+
       <Transition name="slide-fade">
-        <div v-if="message" class="notification-toast" :class="{'error': errorMessage}">
+        <div v-if="message" class="notification-toast" :class="{ 'error': errorMessage }">
           <span class="notification-icon">{{ errorMessage ? '❌' : '✅' }}</span>
           <span class="notification-message">{{ message }}</span>
         </div>
@@ -122,20 +90,20 @@ export default {
     const message = ref('');
     const errorMessage = ref(false);
     let messageTimeout = null;
-    
+
     // 加载配置（带重试机制）
     const loadConfig = async (retries = 30, delay = 500) => {
       for (let i = 0; i < retries; i++) {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 2000);
-          
+
           const response = await fetch('http://127.0.0.1:8000/config', {
             signal: controller.signal
           });
-          
+
           clearTimeout(timeoutId);
-          
+
           if (response.ok) {
             const data = await response.json();
             if (data.success) {
@@ -184,7 +152,7 @@ export default {
         }
       }
     };
-    
+
     // 保存配置
     const saveConfig = async () => {
       try {
@@ -195,7 +163,7 @@ export default {
           },
           body: JSON.stringify(config.value)
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
@@ -211,24 +179,24 @@ export default {
         showMessage(`保存配置失败: ${error.message}`, true);
       }
     };
-    
+
     // 显示消息（自动消失）
     const showMessage = (msg, isError = false) => {
       // 清除之前的定时器
       if (messageTimeout) {
         clearTimeout(messageTimeout);
       }
-      
+
       message.value = msg;
       errorMessage.value = isError;
-      
+
       // 3秒后自动消失
       messageTimeout = setTimeout(() => {
         message.value = '';
         errorMessage.value = false;
       }, 3000);
     };
-    
+
     // 恢复默认配置
     const resetConfig = () => {
       config.value = {
@@ -246,19 +214,19 @@ export default {
       };
       showMessage('已恢复默认配置，请记得保存', false);
     };
-    
+
     // 页面加载时获取配置
     onMounted(async () => {
       await loadConfig();
     });
-    
+
     // 组件卸载时清理定时器
     onUnmounted(() => {
       if (messageTimeout) {
         clearTimeout(messageTimeout);
       }
     });
-    
+
     return {
       config,
       message,
@@ -322,6 +290,25 @@ export default {
   padding-bottom: 6px;
   border-bottom: 2px solid var(--border-color);
   letter-spacing: -0.2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.api-link {
+  font-size: 0.75rem;
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: var(--primary-light);
+  transition: all 0.2s;
+}
+
+.api-link:hover {
+  text-decoration: underline;
+  opacity: 0.9;
 }
 
 .form-list {
@@ -627,19 +614,19 @@ export default {
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .form-label {
     flex: none;
     text-align: left;
     width: 100%;
   }
-  
+
   .form-input {
     flex: 1;
     max-width: 100%;
     width: 100%;
   }
-  
+
   .form-grid {
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 20px;
@@ -650,11 +637,11 @@ export default {
   .form-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .action-bar {
     flex-direction: column;
   }
-  
+
   .action-bar .btn {
     width: 100%;
     justify-content: center;
@@ -665,15 +652,15 @@ export default {
   .settings-page {
     gap: 20px;
   }
-  
+
   .setting-group h3 {
     font-size: 1.15rem;
   }
-  
+
   .form-grid {
     gap: 18px;
   }
-  
+
   .checkbox-group {
     padding: 14px;
   }

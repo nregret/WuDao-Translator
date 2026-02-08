@@ -1,10 +1,11 @@
 <template>
   <div class="batch-file-translation">
-    <div class="card" :class="{ 'translating': isTranslating || translationProgress.total > 0 }" :style="progressBorderStyle">
+    <div class="card" :class="{ 'translating': isTranslating || translationProgress.total > 0 }"
+      :style="progressBorderStyle">
       <h2 class="card-title">
         <i class="icon">📁</i> 批量文件翻译
       </h2>
-      
+
       <div class="controls-section">
         <!-- 目标语言 - 最左边 -->
         <div class="control-group lang-selector">
@@ -24,7 +25,7 @@
             <option value="ar">🇸🇦 阿拉伯语</option>
           </select>
         </div>
-        
+
         <!-- 翻译引擎切换 -->
         <div class="engine-selector">
           <label class="control-label">
@@ -32,64 +33,49 @@
             <span class="label-text">翻译引擎</span>
           </label>
           <div class="engine-toggle-group">
-            <button 
-              class="engine-toggle-btn" 
-              :class="{ active: provider === 'llama-cpp' }"
-              @click="provider = 'llama-cpp'; onProviderChange()"
-            >
+            <button class="engine-toggle-btn" :class="{ active: provider === 'llama-cpp' }"
+              @click="provider = 'llama-cpp'; onProviderChange()">
               <span class="btn-icon">🎯</span>
               <span class="btn-text">本地模型</span>
               <span class="btn-badge" v-if="provider === 'llama-cpp'">当前</span>
             </button>
-            <button 
-              class="engine-toggle-btn" 
-              :class="{ active: provider === 'openai' || provider === 'baidu' }"
-              @click="provider = 'openai'; onProviderChange()"
-            >
+            <button class="engine-toggle-btn" :class="{ active: provider === 'openai' || provider === 'baidu' }"
+              @click="provider = 'openai'; onProviderChange()">
               <span class="btn-icon">☁️</span>
               <span class="btn-text">云端API</span>
               <span class="btn-badge" v-if="provider === 'openai' || provider === 'baidu'">当前</span>
             </button>
           </div>
         </div>
-        
+
         <!-- 翻译模型选择 - 仅当选择本地模型时显示 -->
         <div class="control-group model-selector" v-if="provider === 'llama-cpp'">
           <label for="batch-model-select" class="control-label">
             <span class="label-icon">🤖</span>
             <span class="label-text">翻译模型</span>
           </label>
-          <select 
-            id="batch-model-select" 
-            v-model="selectedModel" 
-            @change="switchModel" 
-            :disabled="loadingModels"
-            class="modern-select"
-          >
-            <option value="" disabled>{{ loadingModels ? '加载中...' : (models.length === 0 ? '未找到模型' : '请选择模型') }}</option>
+          <select id="batch-model-select" v-model="selectedModel" @change="switchModel" :disabled="loadingModels"
+            class="modern-select">
+            <option value="" disabled>{{ loadingModels ? '加载中...' : (models.length === 0 ? '未找到模型' : '请选择模型') }}
+            </option>
             <option v-for="model in models" :key="model.name" :value="model.name">
               {{ model.name }} ({{ model.size_mb }} MB)
             </option>
           </select>
         </div>
-        
+
         <!-- 服务商选择 - 仅当选择云端API时显示 -->
         <div class="control-group provider-selector" v-if="provider === 'openai' || provider === 'baidu'">
           <label for="batch-provider-select" class="control-label">
             <span class="label-icon">🔌</span>
             <span class="label-text">服务商</span>
           </label>
-          <select 
-            id="batch-provider-select" 
-            v-model="apiProvider" 
-            @change="onApiProviderChange"
-            class="modern-select"
-          >
+          <select id="batch-provider-select" v-model="apiProvider" @change="onApiProviderChange" class="modern-select">
             <option value="baidu">百度翻译</option>
           </select>
         </div>
       </div>
-      
+
       <!-- 文件上传区域 -->
       <div class="file-upload-section">
         <div class="file-list-container">
@@ -103,7 +89,7 @@
               <span class="btn-text">选择文件夹</span>
             </button>
           </div>
-          
+
           <div v-if="selectedFiles.length > 0" class="file-list-content">
             <div class="file-list-header">
               <span class="file-count-text">已选择 {{ selectedFiles.length }} 个文件</span>
@@ -118,54 +104,39 @@
           </div>
         </div>
       </div>
-      
+
       <!-- 保存选项 -->
       <div class="save-options">
         <div class="option-group">
           <label class="radio-option">
-            <input 
-              type="radio" 
-              v-model="saveMode" 
-              value="replace"
-            />
+            <input type="radio" v-model="saveMode" value="replace" />
             <span>替换原文件</span>
           </label>
           <label class="radio-option">
-            <input 
-              type="radio" 
-              v-model="saveMode" 
-              value="save_as"
-            />
+            <input type="radio" v-model="saveMode" value="save_as" />
             <span>另存为</span>
           </label>
         </div>
-        
+
         <div class="save-path-selector" :class="{ disabled: saveMode === 'replace' }">
           <label class="path-label">保存路径：</label>
           <div class="path-display">{{ savePath || '未选择' }}</div>
-          <button 
-            @click="selectSavePath" 
-            class="btn btn-secondary small"
-            :disabled="saveMode === 'replace'"
-          >
+          <button @click="selectSavePath" class="btn btn-secondary small" :disabled="saveMode === 'replace'">
             <span>📂</span> 选择文件夹
           </button>
         </div>
       </div>
-      
+
       <!-- 翻译按钮 -->
       <div class="translate-action">
-        <button 
-          @click="startBatchTranslation" 
-          class="btn btn-primary"
-          :disabled="selectedFiles.length === 0 || isTranslating || (provider === 'llama-cpp' && !selectedModel) || (saveMode === 'save_as' && !savePath)"
-        >
+        <button @click="startBatchTranslation" class="btn btn-primary"
+          :disabled="selectedFiles.length === 0 || isTranslating || (provider === 'llama-cpp' && !selectedModel) || (saveMode === 'save_as' && !savePath)">
           <span v-if="!isTranslating">🚀</span>
           <span v-else class="spinner">⏳</span>
           {{ isTranslating ? '翻译中...' : '开始翻译' }}
         </button>
       </div>
-      
+
     </div>
   </div>
 </template>
@@ -178,22 +149,22 @@ export default {
   name: 'BatchFileTranslation',
   setup() {
     const targetLang = ref('zh');
-    const provider = ref('llama-cpp');
+    const provider = ref('baidu');
     const result = ref('');
-    
+
     // 模型选择
     const models = ref([]);
     const selectedModel = ref('');
     const loadingModels = ref(false);
-    
+
     // API服务商选择（云端API时使用）
     const apiProvider = ref('baidu');
-    
+
     // 文件选择
     const selectedFiles = ref([]);
     const saveMode = ref('replace'); // replace or save_as
     const savePath = ref('');
-    
+
     // 翻译状态
     const isTranslating = ref(false);
     const translationProgress = ref({
@@ -201,7 +172,7 @@ export default {
       total: 0,
       percent: 0
     });
-    
+
     // 计算状态文本
     // 计算进度条边框样式
     const progressBorderStyle = computed(() => {
@@ -213,7 +184,7 @@ export default {
       }
       return {};
     });
-    
+
     // 加载模型列表
     const loadModels = async () => {
       if (provider.value !== 'llama-cpp') {
@@ -221,7 +192,7 @@ export default {
         selectedModel.value = '';
         return;
       }
-      
+
       loadingModels.value = true;
       try {
         const response = await fetch('http://127.0.0.1:8000/models');
@@ -242,20 +213,20 @@ export default {
         loadingModels.value = false;
       }
     };
-    
+
     // 加载配置
     const loadConfig = async (retries = 30, delay = 500) => {
       for (let i = 0; i < retries; i++) {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 2000);
-          
+
           const response = await fetch('http://127.0.0.1:8000/config', {
             signal: controller.signal
           });
-          
+
           clearTimeout(timeoutId);
-          
+
           if (response.ok) {
             const data = await response.json();
             if (data.success) {
@@ -283,11 +254,11 @@ export default {
         }
       }
     };
-    
+
     // 切换模型
     const switchModel = async () => {
       if (!selectedModel.value || provider.value !== 'llama-cpp') return;
-      
+
       try {
         const response = await fetch('http://127.0.0.1:8000/switch-model', {
           method: 'POST',
@@ -298,7 +269,7 @@ export default {
             model_name: selectedModel.value
           })
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
@@ -311,13 +282,13 @@ export default {
         console.error('切换模型失败:', error);
       }
     };
-    
+
     // API服务商切换处理
     const onApiProviderChange = () => {
       // 更新实际的provider为百度
       provider.value = 'baidu';
     };
-    
+
     // 翻译引擎切换处理
     const onProviderChange = async () => {
       if (provider.value === 'llama-cpp') {
@@ -332,22 +303,22 @@ export default {
         }
       }
     };
-    
+
     // 选择文件
     const selectFiles = async () => {
       try {
         // 动态导入Tauri对话框插件
         const { open } = await import('@tauri-apps/plugin-dialog');
-        
+
         // 打开文件选择对话框
         const result = await open({
           multiple: true,
           filters: [{ name: 'Text Files', extensions: ['txt'] }]
         });
-        
+
         if (result) {
           let paths = [];
-          
+
           if (Array.isArray(result)) {
             paths = result.map(f => typeof f === 'string' ? f : f.path || f.name);
           } else {
@@ -356,7 +327,7 @@ export default {
               paths = [path];
             }
           }
-          
+
           // 过滤只保留 .txt 文件并添加到列表
           for (const path of paths) {
             if (path.toLowerCase().endsWith('.txt')) {
@@ -371,19 +342,19 @@ export default {
         alert('选择文件失败: ' + error.message);
       }
     };
-    
+
     // 选择文件夹
     const selectFolder = async () => {
       try {
         // 动态导入Tauri对话框插件
         const { open } = await import('@tauri-apps/plugin-dialog');
-        
+
         // 打开文件夹选择对话框
         const folderResult = await open({
           directory: true,
           multiple: false
         });
-        
+
         if (folderResult) {
           const folderPath = typeof folderResult === 'string' ? folderResult : folderResult.path || folderResult.name;
           if (folderPath) {
@@ -406,18 +377,18 @@ export default {
         alert('选择文件夹失败: ' + error.message);
       }
     };
-    
+
     // 选择保存路径
     const selectSavePath = async () => {
       try {
         // 动态导入Tauri对话框插件
         const { open } = await import('@tauri-apps/plugin-dialog');
-        
+
         const result = await open({
           directory: true,
           multiple: false
         });
-        
+
         if (result) {
           const path = typeof result === 'string' ? result : result.path || result.name;
           if (path) {
@@ -428,17 +399,17 @@ export default {
         console.error('选择保存路径失败:', error);
       }
     };
-    
+
     // 移除文件
     const removeFile = (index) => {
       selectedFiles.value.splice(index, 1);
     };
-    
+
     // 清空文件
     const clearFiles = () => {
       selectedFiles.value = [];
     };
-    
+
     // 开始批量翻译
     const startBatchTranslation = async () => {
       if (selectedFiles.value.length === 0) return;
@@ -450,33 +421,33 @@ export default {
         alert('请选择保存路径');
         return;
       }
-      
+
       isTranslating.value = true;
       const totalFiles = selectedFiles.value.length;
       let successCount = 0;
       let failCount = 0;
-      
+
       // 初始化进度
       translationProgress.value = {
         current: 0,
         total: totalFiles,
         percent: 0
       };
-      
+
       try {
         // 逐个文件翻译，以便实时更新进度
         for (let i = 0; i < selectedFiles.value.length; i++) {
           const filePath = selectedFiles.value[i];
-          
+
           try {
             // 读取文件内容
             const fileContent = await invoke('read_file_content', { filePath });
-            
+
             if (!fileContent || !fileContent.trim()) {
               failCount++;
               continue;
             }
-            
+
             // 调用翻译API
             const translateResponse = await fetch('http://127.0.0.1:8000/translate', {
               method: 'POST',
@@ -490,14 +461,14 @@ export default {
                 provider: provider.value === 'llama-cpp' ? 'llama-cpp' : 'baidu'
               })
             });
-            
+
             if (!translateResponse.ok) {
               const errorData = await translateResponse.json().catch(() => ({}));
               throw new Error(errorData.detail || `翻译失败: ${translateResponse.status}`);
             }
-            
+
             const translateData = await translateResponse.json();
-            
+
             if (translateData.success) {
               // 保存翻译后的文件
               let finalSavePath;
@@ -508,17 +479,17 @@ export default {
                 const fileName = filePath.split(/[/\\]/).pop();
                 const name = fileName.replace(/\.txt$/, '');
                 const newFileName = `${name}_translated.txt`;
-                finalSavePath = await invoke('join_path', { 
-                  dir: savePath.value, 
-                  file: newFileName 
+                finalSavePath = await invoke('join_path', {
+                  dir: savePath.value,
+                  file: newFileName
                 });
               }
-              
-              await invoke('write_file_content', { 
-                filePath: finalSavePath, 
-                content: translateData.translated_text 
+
+              await invoke('write_file_content', {
+                filePath: finalSavePath,
+                content: translateData.translated_text
               });
-              
+
               successCount++;
             } else {
               failCount++;
@@ -527,7 +498,7 @@ export default {
             console.error(`翻译文件 ${filePath} 失败:`, error);
             failCount++;
           }
-          
+
           // 实时更新进度
           translationProgress.value = {
             current: i + 1,
@@ -535,7 +506,7 @@ export default {
             percent: Math.round(((i + 1) / totalFiles) * 100)
           };
         }
-        
+
         // 翻译完成，等待3秒后重置
         setTimeout(() => {
           translationProgress.value = {
@@ -544,7 +515,7 @@ export default {
             percent: 0
           };
         }, 3000);
-        
+
         alert(`翻译完成！成功: ${successCount}，失败: ${failCount}`);
       } catch (error) {
         console.error('批量翻译错误:', error);
@@ -553,14 +524,14 @@ export default {
         isTranslating.value = false;
       }
     };
-    
+
     onMounted(async () => {
       await loadConfig();
       if (provider.value === 'llama-cpp') {
         await loadModels();
       }
     });
-    
+
     return {
       targetLang,
       provider,
@@ -806,41 +777,50 @@ export default {
 
 .upload-buttons {
   display: flex;
-  gap: 12px;  /* 减少间距 */
-  margin-bottom: 12px;  /* 减少下边距 */
+  gap: 12px;
+  /* 减少间距 */
+  margin-bottom: 12px;
+  /* 减少下边距 */
 }
 
 .upload-btn {
   flex: 1;
   display: flex;
-  flex-direction: row;  /* 改为水平布局 */
+  flex-direction: row;
+  /* 改为水平布局 */
   align-items: center;
   justify-content: center;
-  gap: 8px;  /* 图标和文字之间的间距 */
-  padding: 12px 16px;  /* 大幅减少内边距 */
+  gap: 8px;
+  /* 图标和文字之间的间距 */
+  padding: 12px 16px;
+  /* 大幅减少内边距 */
   border: 2px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: inherit;
-  min-height: 48px;  /* 设置最小高度 */
+  min-height: 48px;
+  /* 设置最小高度 */
 }
 
 .upload-btn:hover {
   border-color: var(--primary-color);
   background: var(--bg-tertiary);
-  transform: translateY(-1px);  /* 减少悬浮效果 */
+  transform: translateY(-1px);
+  /* 减少悬浮效果 */
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
 }
 
 .upload-btn .btn-icon {
-  font-size: 1.2rem;  /* 大幅缩小图标 */
+  font-size: 1.2rem;
+  /* 大幅缩小图标 */
   opacity: 0.8;
 }
 
 .upload-btn .btn-text {
-  font-size: 0.85rem;  /* 稍微缩小文字 */
+  font-size: 0.85rem;
+  /* 稍微缩小文字 */
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -1089,8 +1069,13 @@ export default {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 
@@ -1104,23 +1089,23 @@ export default {
     flex-direction: column;
     gap: 16px;
   }
-  
+
   .lang-selector,
   .model-selector,
   .provider-selector {
     width: 100%;
     min-width: 100%;
   }
-  
+
   .engine-selector {
     width: 100%;
   }
-  
+
   .engine-toggle-group {
     width: 100%;
     justify-content: stretch;
   }
-  
+
   .engine-toggle-btn {
     flex: 1;
     justify-content: center;

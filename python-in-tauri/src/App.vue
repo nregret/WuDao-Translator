@@ -4,44 +4,29 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <div class="logo-icon">🌐</div>
+          <div class="logo-icon">📓</div>
           <div class="logo-text">
-            <h1>智能翻译</h1>
+            <h1>无道翻译</h1>
             <p>AI驱动的实时翻译</p>
           </div>
         </div>
       </div>
-      
+
       <nav class="nav-menu">
-        <div 
-          v-for="tab in tabs" 
-          :key="tab.id"
-          class="nav-item"
-          :class="{ active: currentTab === tab.id }"
-          @click="switchTab(tab.id)"
-        >
+        <div v-for="tab in tabs" :key="tab.id" class="nav-item" :class="{ active: currentTab === tab.id }"
+          @click="switchTab(tab.id)">
           <span class="nav-icon">{{ tab.icon }}</span>
           <span class="nav-label">{{ tab.label }}</span>
         </div>
       </nav>
-      
+
       <div class="sidebar-footer">
         <div class="theme-toggle">
-          <button 
-            class="theme-btn"
-            :class="{ active: theme === 'light' }"
-            @click="setTheme('light')"
-            title="浅色主题"
-          >
+          <button class="theme-btn" :class="{ active: theme === 'light' }" @click="setTheme('light')" title="浅色主题">
             <span class="theme-icon">☀️</span>
             <span class="theme-label">浅色</span>
           </button>
-          <button 
-            class="theme-btn"
-            :class="{ active: theme === 'dark' }"
-            @click="setTheme('dark')"
-            title="暗色主题"
-          >
+          <button class="theme-btn" :class="{ active: theme === 'dark' }" @click="setTheme('dark')" title="暗色主题">
             <span class="theme-icon">🌙</span>
             <span class="theme-label">暗色</span>
           </button>
@@ -82,6 +67,7 @@ import ApiTranslation from './components/ApiTranslation.vue';
 import Settings from './components/Settings.vue';
 import BatchFileTranslation from './components/BatchFileTranslation.vue';
 import BatchTextReplace from './components/BatchTextReplace.vue';
+import BatchPDFTranslation from './components/BatchPDFTranslation.vue';
 
 export default {
   name: 'App',
@@ -89,7 +75,8 @@ export default {
     ApiTranslation,
     Settings,
     BatchFileTranslation,
-    BatchTextReplace
+    BatchTextReplace,
+    BatchPDFTranslation
   },
   setup() {
     const currentTab = ref('api');
@@ -100,10 +87,11 @@ export default {
     const tabs = [
       { id: 'api', label: '智能翻译', component: ApiTranslation, icon: '🤖' },
       { id: 'batch', label: '批量翻译', component: BatchFileTranslation, icon: '📁' },
+      { id: 'pdf', label: 'PDF翻译', component: BatchPDFTranslation, icon: '📄' },
       { id: 'replace', label: '批量文本替换', component: BatchTextReplace, icon: '🔄' },
       { id: 'settings', label: '设置', component: Settings, icon: '⚙️' }
     ];
-    
+
     const currentComponent = computed(() => {
       const tab = tabs.find(t => t.id === currentTab.value);
       return tab ? tab.component : tabs[0].component;
@@ -127,11 +115,11 @@ export default {
         default: return '后端离线';
       }
     });
-    
+
     const switchTab = (tabId) => {
       currentTab.value = tabId;
     };
-    
+
     // 主题管理
     const setTheme = (newTheme) => {
       theme.value = newTheme;
@@ -141,9 +129,11 @@ export default {
       window.dispatchEvent(new CustomEvent('theme-changed', { detail: { theme: newTheme } }));
     };
 
-    const checkBackendStatus = async () => {
+    const checkBackendStatus = async (retryCount = 0) => {
       try {
-        backendStatus.value = 'checking';
+        if (retryCount === 0) {
+          backendStatus.value = 'checking';
+        }
 
         let port = 8000;
         try {
@@ -156,7 +146,7 @@ export default {
         }
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
 
         const response = await fetch(`http://127.0.0.1:${port}/health`, {
           signal: controller.signal
@@ -171,8 +161,16 @@ export default {
           throw new Error(`HTTP ${response.status}`);
         }
       } catch (error) {
-        backendStatus.value = 'error';
-        backendError.value = error.message;
+        // 如果失败，继续重试
+        backendStatus.value = 'checking'; // 保持检查状态，避免闪烁
+
+        // 最多重试20次（约40秒），之后显示错误
+        if (retryCount < 20) {
+          setTimeout(() => checkBackendStatus(retryCount + 1), 2000);
+        } else {
+          backendStatus.value = 'error';
+          backendError.value = error.message;
+        }
       }
     };
 
@@ -197,7 +195,7 @@ export default {
         }
       });
     });
-    
+
     return {
       currentTab,
       tabs,
@@ -702,8 +700,15 @@ export default {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .error-details {
@@ -744,8 +749,13 @@ export default {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* ========== 响应式设计 ========== */
@@ -753,12 +763,12 @@ export default {
   .sidebar {
     width: 260px;
   }
-  
+
   .main-content {
     margin-left: 260px;
     padding: 24px;
   }
-  
+
   .card {
     padding: 28px;
   }
@@ -768,25 +778,25 @@ export default {
   .sidebar {
     width: 240px;
   }
-  
+
   .main-content {
     margin-left: 240px;
     padding: 20px;
   }
-  
+
   .container {
     padding: 0;
   }
-  
+
   .card {
     padding: 24px;
     margin-bottom: 20px;
   }
-  
+
   .card-title {
     font-size: 1.4rem;
   }
-  
+
   .theme-label {
     display: none;
   }
@@ -796,22 +806,22 @@ export default {
   .sidebar {
     display: none;
   }
-  
+
   .main-content {
     margin: 0;
     padding: 16px;
   }
-  
+
   .card {
     padding: 20px;
   }
-  
+
   .input-group input,
   .input-group select,
   .input-group textarea {
     padding: 12px 16px;
   }
-  
+
   .btn {
     padding: 12px 20px;
     font-size: 0.95rem;

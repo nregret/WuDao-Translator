@@ -41,6 +41,34 @@ fn scan_folder_txt_files(folder_path: String) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+fn scan_folder_pdf_files(folder_path: String) -> Result<Vec<String>, String> {
+    let path = PathBuf::from(folder_path);
+    if !path.exists() || !path.is_dir() {
+        return Err("文件夹不存在".to_string());
+    }
+    
+    let mut pdf_files = Vec::new();
+    
+    fn scan_dir(dir: &PathBuf, files: &mut Vec<String>) {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    scan_dir(&path, files);
+                } else if path.extension().and_then(|s| s.to_str()) == Some("pdf") {
+                    if let Some(path_str) = path.to_str() {
+                        files.push(path_str.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    scan_dir(&path, &mut pdf_files);
+    Ok(pdf_files)
+}
+
+#[tauri::command]
 fn check_path_type(path: String) -> Result<serde_json::Value, String> {
     use serde_json::json;
     let path_buf = PathBuf::from(&path);
@@ -159,12 +187,17 @@ fn start_python_server(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error:
         return Err("Python环境或后端文件不完整".into());
     }
 
-    let child_result = Command::new(&python_exe)
-        .arg(&backend_main)
-        .current_dir(&backend_dir)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
+    let mut cmd = Command::new(&python_exe);
+    cmd.arg(&backend_main);
+    cmd.current_dir(&backend_dir);
+
+    // #[cfg(windows)]
+    // {
+    //     use std::os::windows::process::CommandExt;
+    //     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    // }
+
+    let child_result = cmd.spawn();
 
     match child_result {
         Ok(child) => {
@@ -178,29 +211,7 @@ fn start_python_server(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error:
         }
     }
 }
-fn wait_for_server(max_retries: u32) -> bool {
-    use std::time::Duration;
-    use std::thread;
-    
-    for i in 0..max_retries {
-        thread::sleep(Duration::from_millis(500));
-        
-        match reqwest::blocking::get("http://127.0.0.1:8000/config") {
-            Ok(response) => {
-                if response.status().is_success() {
-                    return true;
-                }
-            }
-            Err(_) => {}
-        }
-        
-        if i < max_retries - 1 {
-            println!("等待后端服务器启动... (尝试 {}/{})", i + 1, max_retries);
-        }
-    }
-    
-    false
-}
+
 
 /// 停止 Python 后端服务器
 fn stop_python_server() {
@@ -210,25 +221,21 @@ fn stop_python_server() {
         
         #[cfg(windows)]
         {
-            // Windows 上先尝试正常终止
             let pid = child.id();
-            let _ = child.kill();
+            // 直接使用 taskkill 强制终止进程树，这是最可靠的方法
+            use std::process::Stdio;
+            use std::os::windows::process::CommandExt;
             
-            // 等待一小段时间看进程是否结束
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            let mut cmd = Command::new("taskkill");
+            cmd.args(&["/F", "/T", "/PID", &pid.to_string()]);
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             
-            // 如果进程还在运行，使用 taskkill 强制终止进程树
-            if child.try_wait().is_ok() {
-                // 进程已结束
-            } else {
-                // 使用 taskkill 强制终止进程树
-                use std::process::Stdio;
-                let _ = Command::new("taskkill")
-                    .args(&["/F", "/T", "/PID", &pid.to_string()])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .output();
-            }
+            let _ = cmd.output();
+                
+             // 同时也调用 kill 以更新 child 状态
+             let _ = child.kill();
         }
         
         #[cfg(not(windows))]
@@ -244,16 +251,14 @@ fn stop_python_server() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![greet, scan_folder_txt_files, check_path_type, read_file_content, write_file_content, join_path])
+        .invoke_handler(tauri::generate_handler![greet, scan_folder_txt_files, scan_folder_pdf_files, check_path_type, read_file_content, write_file_content, join_path])
         .setup(|app| {
             match start_python_server(app.handle()) {
                 Ok(_) => {
-                    if !wait_for_server(20) {
-                        println!("警告: 后端服务器启动超时");
-                    }
+                    println!("后端服务启动命令已发送");
                 }
                 Err(e) => {
                     println!("启动失败: {}", e);
@@ -271,14 +276,17 @@ pub fn run() {
                     // 检查是否还有窗口
                     let windows = app_handle.webview_windows();
                     if windows.is_empty() {
-                        stop_python_server();
+                         // 在这里不直接停止，等待 Exit 事件
                     }
                 });
             }
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("error while running tauri application");
-    
-    // 确保应用退出时清理
-    stop_python_server();
+
+    app.run(|_app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            stop_python_server();
+        }
+    });
 }

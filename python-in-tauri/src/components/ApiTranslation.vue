@@ -4,7 +4,7 @@
       <h2 class="card-title">
         <i class="icon">🤖</i> 智能翻译
       </h2>
-      
+
       <div class="controls-section">
         <!-- 目标语言 - 最左边 -->
         <div class="control-group lang-selector">
@@ -24,7 +24,7 @@
             <option value="ar">🇸🇦 阿拉伯语</option>
           </select>
         </div>
-        
+
         <!-- 翻译引擎切换 - 卡片式设计 -->
         <div class="engine-selector">
           <label class="control-label">
@@ -32,64 +32,49 @@
             <span class="label-text">翻译引擎</span>
           </label>
           <div class="engine-toggle-group">
-            <button 
-              class="engine-toggle-btn" 
-              :class="{ active: provider === 'llama-cpp' }"
-              @click="provider = 'llama-cpp'; onProviderChange()"
-            >
+            <button class="engine-toggle-btn" :class="{ active: provider === 'llama-cpp' }"
+              @click="provider = 'llama-cpp'; onProviderChange()">
               <span class="btn-icon">🎯</span>
               <span class="btn-text">本地模型</span>
               <span class="btn-badge" v-if="provider === 'llama-cpp'">当前</span>
             </button>
-            <button 
-              class="engine-toggle-btn" 
-              :class="{ active: provider === 'openai' || provider === 'baidu' }"
-              @click="provider = 'openai'; onProviderChange()"
-            >
+            <button class="engine-toggle-btn" :class="{ active: provider === 'openai' || provider === 'baidu' }"
+              @click="provider = 'openai'; onProviderChange()">
               <span class="btn-icon">☁️</span>
               <span class="btn-text">云端API</span>
               <span class="btn-badge" v-if="provider === 'openai' || provider === 'baidu'">当前</span>
             </button>
           </div>
         </div>
-        
+
         <!-- 翻译模型选择 - 仅当选择本地模型时显示 -->
         <div class="control-group model-selector" v-if="provider === 'llama-cpp'">
           <label for="model-select" class="control-label">
             <span class="label-icon">🤖</span>
             <span class="label-text">翻译模型</span>
           </label>
-          <select 
-            id="model-select" 
-            v-model="selectedModel" 
-            @change="switchModel" 
-            :disabled="loadingModels"
-            class="modern-select"
-          >
-            <option value="" disabled>{{ loadingModels ? '加载中...' : (models.length === 0 ? '未找到模型' : '请选择模型') }}</option>
+          <select id="model-select" v-model="selectedModel" @change="switchModel" :disabled="loadingModels"
+            class="modern-select">
+            <option value="" disabled>{{ loadingModels ? '加载中...' : (models.length === 0 ? '未找到模型' : '请选择模型') }}
+            </option>
             <option v-for="model in models" :key="model.name" :value="model.name">
               {{ model.name }} ({{ model.size_mb }} MB)
             </option>
           </select>
         </div>
-        
+
         <!-- 服务商选择 - 仅当选择云端API时显示 -->
         <div class="control-group provider-selector" v-if="provider === 'openai' || provider === 'baidu'">
           <label for="provider-select" class="control-label">
             <span class="label-icon">🔌</span>
             <span class="label-text">服务商</span>
           </label>
-          <select 
-            id="provider-select" 
-            v-model="apiProvider" 
-            @change="onApiProviderChange"
-            class="modern-select"
-          >
+          <select id="provider-select" v-model="apiProvider" @change="onApiProviderChange" class="modern-select">
             <option value="baidu">百度翻译</option>
           </select>
         </div>
       </div>
-      
+
       <div class="translation-workspace">
         <div class="input-panel">
           <div class="panel-header">
@@ -100,15 +85,11 @@
             </div>
           </div>
           <div class="input-area">
-            <textarea 
-              id="source-text" 
-              v-model="sourceText" 
-              placeholder="请输入要翻译的文本..."
-              @input="debouncedTranslate"
-            ></textarea>
+            <textarea id="source-text" v-model="sourceText" placeholder="请输入要翻译的文本..."
+              @input="debouncedTranslate"></textarea>
           </div>
         </div>
-        
+
         <div class="output-panel">
           <div class="panel-header">
             <h3>译文</h3>
@@ -130,7 +111,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- 引擎状态显示在左下角 -->
       <div class="engine-status" :class="translationStatus">
         <div class="status-indicator">
@@ -163,18 +144,18 @@ export default {
   setup() {
     const sourceText = ref('');
     const targetLang = ref('zh');
-    const provider = ref('llama-cpp');
+    const provider = ref('baidu');
     const result = ref('');
     const translationStatus = ref('idle'); // idle, translating, completed
-    
+
     // 模型选择
     const models = ref([]);
     const selectedModel = ref('');
     const loadingModels = ref(false);
-    
+
     // API服务商选择（云端API时使用）
     const apiProvider = ref('baidu');
-    
+
     const targetLangMap = {
       'zh': '中文',
       'en': '英语',
@@ -186,7 +167,7 @@ export default {
       'ru': '俄语',
       'ar': '阿拉伯语'
     };
-    
+
     // 计算状态文本
     const statusText = computed(() => {
       switch (translationStatus.value) {
@@ -198,7 +179,7 @@ export default {
           return '已就绪';
       }
     });
-    
+
     // 加载模型列表
     const loadModels = async () => {
       if (provider.value !== 'llama-cpp') {
@@ -206,7 +187,7 @@ export default {
         selectedModel.value = '';
         return;
       }
-      
+
       loadingModels.value = true;
       try {
         const response = await fetch('http://127.0.0.1:8000/models');
@@ -227,20 +208,20 @@ export default {
         loadingModels.value = false;
       }
     };
-    
+
     // 加载配置（带重试机制）
     const loadConfig = async (retries = 30, delay = 500) => {
       for (let i = 0; i < retries; i++) {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 2000);
-          
+
           const response = await fetch('http://127.0.0.1:8000/config', {
             signal: controller.signal
           });
-          
+
           clearTimeout(timeoutId);
-          
+
           if (response.ok) {
             const data = await response.json();
             if (data.success) {
@@ -268,11 +249,11 @@ export default {
         }
       }
     };
-    
+
     // 切换模型
     const switchModel = async () => {
       if (!selectedModel.value || provider.value !== 'llama-cpp') return;
-      
+
       try {
         const response = await fetch('http://127.0.0.1:8000/switch-model', {
           method: 'POST',
@@ -283,7 +264,7 @@ export default {
             model_name: selectedModel.value
           })
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
@@ -300,7 +281,7 @@ export default {
         console.error('切换模型失败:', error);
       }
     };
-    
+
     // 百度翻译
     const translateWithBaidu = async () => {
       try {
@@ -316,14 +297,14 @@ export default {
             provider: 'baidu'
           })
         });
-        
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
           result.value = data.translated_text;
           translationStatus.value = 'completed';
@@ -343,7 +324,7 @@ export default {
         translationStatus.value = 'idle';
       }
     };
-    
+
     // API服务商切换处理
     const onApiProviderChange = () => {
       // 更新实际的provider为百度
@@ -353,7 +334,7 @@ export default {
         translate();
       }
     };
-    
+
     // 翻译引擎切换处理
     const onProviderChange = async () => {
       if (provider.value === 'llama-cpp') {
@@ -372,14 +353,14 @@ export default {
         await translate();
       }
     };
-    
+
     onMounted(async () => {
       await loadConfig();
       if (provider.value === 'llama-cpp') {
         await loadModels();
       }
     });
-    
+
     // 使用SSE进行流式翻译
     const translate = async () => {
       if (!sourceText.value.trim()) {
@@ -387,28 +368,28 @@ export default {
         translationStatus.value = 'idle';
         return;
       }
-      
+
       // 如果使用本地模型，检查是否已选择模型
       if (provider.value === 'llama-cpp' && !selectedModel.value) {
         result.value = '请先选择模型';
         translationStatus.value = 'idle';
         return;
       }
-      
+
       // 如果使用百度翻译，使用普通API
       if (provider.value === 'baidu') {
         translationStatus.value = 'translating';
         await translateWithBaidu();
         return;
       }
-      
+
       // 开始翻译
       translationStatus.value = 'translating';
-      
+
       try {
         // 使用流式API进行翻译（仅本地模型）
         const apiUrl = 'http://127.0.0.1:8000/translate-stream';
-          
+
         if (provider.value === 'llama-cpp') {
           // 使用流式API
           const response = await fetch(apiUrl, {
@@ -423,44 +404,44 @@ export default {
               provider: provider.value
             })
           });
-          
+
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
           }
-          
+
           // 使用流式响应
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
-          
+
           result.value = '';
-          
+
           while (true) {
             const { done, value } = await reader.read();
-            
+
             if (done) break;
-            
+
             buffer += decoder.decode(value, { stream: true });
-            
+
             // 按行分割并处理每个事件
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
-            
+
             for (const line of lines) {
               if (line.startsWith('data: ')) {
                 try {
                   const data = JSON.parse(line.slice(6));
-                  
+
                   if (data.error) {
                     throw new Error(data.error);
                   }
-                  
+
                   if (data.text) {
                     result.value += data.text;
                     await new Promise(resolve => setTimeout(resolve, 0));
                   }
-                  
+
                   if (data.done) {
                     translationStatus.value = 'completed';
                     // 3秒后自动切换回就绪状态
@@ -484,14 +465,14 @@ export default {
         translationStatus.value = 'idle';
       }
     };
-    
+
     // 清空输入
     const clearInput = () => {
       sourceText.value = '';
       result.value = '';
       translationStatus.value = 'idle';
     };
-    
+
     // 复制原文
     const copyInput = () => {
       if (sourceText.value) {
@@ -499,7 +480,7 @@ export default {
         showNotification('原文已复制到剪贴板');
       }
     };
-    
+
     // 复制译文
     const copyResult = () => {
       if (result.value) {
@@ -507,7 +488,7 @@ export default {
         showNotification('译文已复制到剪贴板');
       }
     };
-    
+
     // 朗读译文
     const speakResult = () => {
       if (result.value && 'speechSynthesis' in window) {
@@ -519,16 +500,16 @@ export default {
         showNotification('浏览器不支持语音合成');
       }
     };
-    
+
     // 显示通知
     const showNotification = (message) => {
       // 简单的通知实现
       console.log(message);
     };
-    
+
     // 防抖函数
     const debouncedTranslate = debounce(translate, 500);
-    
+
     return {
       sourceText,
       targetLang,
@@ -858,11 +839,14 @@ export default {
 }
 
 @keyframes pulse {
-  0%, 100% { 
+
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
-  50% { 
+
+  50% {
     transform: scale(1.15);
     opacity: 0.8;
   }
@@ -935,10 +919,13 @@ export default {
 }
 
 @keyframes pulse-yellow {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.7;
     transform: scale(1.1);
@@ -962,20 +949,20 @@ export default {
   .controls-section {
     gap: 16px;
   }
-  
+
   .lang-selector,
   .model-selector {
     min-width: 140px;
   }
-  
+
   .engine-toggle-group {
     flex-wrap: wrap;
   }
-  
+
   .translation-workspace {
     gap: 20px;
   }
-  
+
   .input-panel,
   .output-panel {
     padding: 20px;
@@ -988,43 +975,43 @@ export default {
     gap: 20px;
     min-height: 0;
   }
-  
+
   .controls-section {
     flex-direction: column;
     gap: 16px;
   }
-  
+
   .lang-selector,
   .model-selector {
     width: 100%;
     min-width: 100%;
   }
-  
+
   .engine-selector {
     width: 100%;
   }
-  
+
   .engine-toggle-group {
     width: 100%;
     justify-content: stretch;
   }
-  
+
   .engine-toggle-btn {
     flex: 1;
     justify-content: center;
   }
-  
+
   .panel-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 14px;
   }
-  
+
   .panel-actions {
     align-self: stretch;
     justify-content: space-between;
   }
-  
+
   .input-area textarea,
   .placeholder,
   .result-content {
@@ -1036,34 +1023,34 @@ export default {
   .smart-translation {
     gap: 20px;
   }
-  
+
   .controls-section {
     gap: 12px;
   }
-  
+
   .engine-toggle-btn {
     padding: 8px 12px;
     font-size: 0.8rem;
   }
-  
+
   .engine-toggle-btn .btn-icon {
     font-size: 1rem;
   }
-  
+
   .panel-actions {
     flex-wrap: wrap;
   }
-  
+
   .btn.small {
     padding: 10px 14px;
     font-size: 0.8rem;
   }
-  
+
   .input-panel,
   .output-panel {
     padding: 16px;
   }
-  
+
   .engine-status {
     padding: 10px 14px;
     font-size: 0.85rem;

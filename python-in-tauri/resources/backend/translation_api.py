@@ -1,11 +1,11 @@
-from fastapi import FastAPI, HTTPException, Request, Query
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import logging
 import asyncio
-from typing import Dict, Optional
+from typing import Optional, Dict, Any, List
 
 # 添加当前目录到模块搜索路径
 import sys
@@ -15,7 +15,19 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from translator import translator, init_translator, cleanup_translator
 
 # 设置日志
-logging.basicConfig(level=logging.INFO)
+import os
+log_dir = os.path.join(os.path.dirname(__file__), "../logs")
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "api.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # 创建FastAPI应用
@@ -43,6 +55,15 @@ class InferenceModeRequest(BaseModel):
 
 
 class BatchFileTranslationRequest(BaseModel):
+    file_paths: list[str]
+    target_lang: str = "zh"
+    source_lang: str = "auto"
+    provider: str = "llama-cpp"
+    save_mode: str = "replace"  # "replace" or "save_as"
+    save_path: Optional[str] = None  # 仅当save_mode为"save_as"时使用
+
+
+class BatchPDFTranslationRequest(BaseModel):
     file_paths: list[str]
     target_lang: str = "zh"
     source_lang: str = "auto"
@@ -605,6 +626,98 @@ async def batch_translate_files(request: BatchFileTranslationRequest):
     except Exception as e:
         logger.error(f"批量翻译文件时发生错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class BatchPDFTranslationRequest(BaseModel):
+    file_paths: List[str]
+    source_lang: str = "auto"
+    target_lang: str = "zh"
+    provider: str = "llama-cpp"
+    save_mode: str = "replace"  # "replace" or "save_as"
+    save_path: Optional[str] = None
+    smart_layout: bool = True   # 是否启用智能排版
+
+@app.post("/batch-translate-pdf")
+async def batch_translate_pdf(request: BatchPDFTranslationRequest):
+    """
+    批量翻译PDF文件接口 (流式响应)
+    """
+    async def event_generator():
+        logger.info("=" * 50)
+        logger.info("收到PDF翻译请求 (流式)")
+        
+        try:
+            import os
+            import json
+            
+            # 发送初始化事件
+            yield f"data: {json.dumps({'type': 'init', 'total_files': len(request.file_paths)})}\n\n"
+            
+            for idx, file_path in enumerate(request.file_paths):
+                try:
+                    logger.info(f"正在处理第{idx+1}/{len(request.file_paths)}个文件: {file_path}")
+                    
+                    # 检查文件
+                    if not os.path.exists(file_path):
+                        yield f"data: {json.dumps({'type': 'error', 'file_index': idx, 'error': '文件不存在'})}\n\n"
+                        continue
+                        
+                    if not file_path.lower().endswith('.pdf'):
+                        yield f"data: {json.dumps({'type': 'error', 'file_index': idx, 'error': '只支持.pdf文件'})}\n\n"
+                        continue
+
+                    # 确定保存路径
+                    if request.save_mode == "replace":
+                        save_path = file_path
+                    else:
+                        if not request.save_path:
+                            yield f"data: {json.dumps({'type': 'error', 'file_index': idx, 'error': '另存为模式下需要指定保存路径'})}\n\n"
+                            continue
+                        
+                        original_filename = os.path.basename(file_path)
+                        name, ext = os.path.splitext(original_filename)
+                        new_filename = f"{name}_translated{ext}"
+                        save_path = os.path.join(request.save_path, new_filename)
+
+                    # 调用分段流式翻译
+                    # translator.translate_pdf_stream 是一个 async generator
+                    async for event_json in translator.translate_pdf_stream(
+                        pdf_path=file_path,
+                        source_lang=request.source_lang,
+                        target_lang=request.target_lang,
+                        provider=request.provider,
+                        save_path=save_path,
+                        smart_layout=request.smart_layout
+                    ):
+                        # 包装事件，添加文件索引信息
+                        try:
+                            event = json.loads(event_json)
+                            event['file_index'] = idx
+                            event['file_path'] = file_path
+                            yield f"data: {json.dumps(event)}\n\n"
+                        except:
+                            yield f"data: {event_json}\n\n"
+                            
+                except Exception as e:
+                    logger.error(f"处理文件 {file_path} 出错: {str(e)}")
+                    yield f"data: {json.dumps({'type': 'error', 'file_index': idx, 'error': str(e)})}\n\n"
+            
+            # 全部完成
+            yield f"data: {json.dumps({'type': 'finish'})}\n\n"
+            
+        except Exception as e:
+            logger.error(f"PDF批量翻译总控出错: {str(e)}")
+            yield f"data: {json.dumps({'type': 'fatal_error', 'error': str(e)})}\n\n"
+            
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
 
 
 if __name__ == "__main__":

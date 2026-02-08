@@ -40,12 +40,15 @@ def main():
             host="127.0.0.1",
             port=port,
             reload=False,
-            log_level="error",
-            access_log=False
+            log_level="info",
+            access_log=True
         )
 
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error starting server: {e}")
+        input("Press Enter to exit...")
 
 if __name__ == "__main__":
     main()

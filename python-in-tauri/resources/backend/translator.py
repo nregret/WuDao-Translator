@@ -4,7 +4,19 @@ from typing import Dict, Optional
 import importlib.util
 
 # 设置日志
-logging.basicConfig(level=logging.INFO)
+import os
+log_dir = os.path.join(os.path.dirname(__file__), "../logs")
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "translator.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 class Translator:
@@ -145,10 +157,37 @@ class Translator:
             target_display = target_lang_map.get(target_lang, target_lang)
             prompt = f"将以下文本翻译为{target_display}，注意只需要输出翻译后的结果，不要额外解释：\n\n{text}"
             
+            # 构建模型路径
+            if not os.path.isabs(model_dir):
+                base_dir = os.path.dirname(__file__)
+                model_dir = os.path.join(base_dir, "..", model_dir)
+                model_dir = os.path.normpath(model_dir)
+            
+            # 如果没有指定当前模型，尝试查找第一个 .gguf 文件
+            if not current_model:
+                if os.path.exists(model_dir):
+                    for file in os.listdir(model_dir):
+                        if file.endswith('.gguf'):
+                            current_model = file
+                            break
+            
+            if not current_model:
+                return {
+                    "success": False,
+                    "error": f"模型文件夹中没有找到 .gguf 文件: {model_dir}"
+                }
+            
+            model_path = os.path.join(model_dir, current_model)
+            
             # 检查模型文件是否存在
             if not os.path.exists(model_path):
-                # 如果没有找到翻译专用模型，提示用户下载或使用通用模型
-                logger.warning(f"翻译模型未找到: {model_path}，请下载合适的GGUF格式翻译模型")
+                return {
+                    "success": False,
+                    "error": f"模型文件不存在: {model_path}。请下载合适的GGUF格式翻译模型"
+                }
+            
+            # 检查模型文件是否存在
+            if not os.path.exists(model_path):
                 return {
                     "success": False,
                     "error": f"模型文件不存在: {model_path}。请下载合适的GGUF格式翻译模型"
@@ -179,8 +218,16 @@ class Translator:
                 if hasattr(self, '_need_recreate'):
                     delattr(self, '_need_recreate')
             
+            # 计算token数量，如果超过上下文窗口则分段翻译
+            # 估算：中文约1.5字符/token，英文约4字符/token
+            estimated_tokens = len(text) // 3  # 保守估计
+            
+            if estimated_tokens > context_length * 0.8:  # 留20%余量
+                logger.info(f"文本过长（估计{estimated_tokens} tokens），将分段翻译")
+                return await self._translate_in_chunks(text, target_display, context_length, max_tokens, temperature)
+            
             # 使用现有模型实例执行翻译（使用流式输出）
-            logger.info(f"开始CPU翻译")
+            logger.info(f"开始CPU翻译，文本长度: {len(text)}, 预览: {text[:50]}...")
             translated_text = ""
             
             # 使用流式生成
@@ -188,7 +235,7 @@ class Translator:
                 prompt,
                 max_tokens=max_tokens,  # 从配置文件获取最大token数
                 temperature=temperature,  # 从配置文件获取温度
-                stop=["\n\n", "###"],  # 停止词
+                stop=["###"],  # 停止词 (移除 \n\n 以防截断多段落文本)
                 stream=True  # 启用流式输出
             )
             
@@ -218,6 +265,92 @@ class Translator:
                 "error": str(e)
             }
     
+    async def _translate_in_chunks(self, text: str, target_display: str, context_length: int, max_tokens: int, temperature: float) -> Dict[str, str]:
+        """
+        分段翻译长文本
+        """
+        try:
+            from llama_cpp import Llama
+            import os
+            
+            # 按段落分段（按换行符和句号分割）
+            paragraphs = []
+            current_chunk = ""
+            
+            # 按行分割，保留段落结构
+            lines = text.split('\n')
+            for line in lines:
+                # 估算当前chunk的token数
+                estimated_chunk_tokens = len(current_chunk + line) // 3
+                
+                if estimated_chunk_tokens > context_length * 0.6:  # 留40%余量给prompt
+                    if current_chunk.strip():
+                        paragraphs.append(current_chunk.strip())
+                    current_chunk = line + "\n"
+                else:
+                    current_chunk += line + "\n"
+            
+            # 添加最后一个chunk
+            if current_chunk.strip():
+                paragraphs.append(current_chunk.strip())
+            
+            logger.info(f"文本分为{len(paragraphs)}段进行翻译")
+            
+            # 确保模型实例存在
+            if self.llm_instance is None:
+                logger.error("模型实例不存在，无法进行分段翻译")
+                return {
+                    "success": False,
+                    "error": "模型实例不存在，无法进行分段翻译"
+                }
+            
+            # 翻译每一段
+            translated_paragraphs = []
+            for i, paragraph in enumerate(paragraphs):
+                if not paragraph.strip():
+                    translated_paragraphs.append("")
+                    continue
+                
+                prompt = f"将以下文本翻译为{target_display}，注意只需要输出翻译后的结果，不要额外解释：\n\n{paragraph}"
+                
+                try:
+                    output = self.llm_instance(
+                        prompt,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        stop=["###"],
+                        stream=True
+                    )
+                    
+                    translated_text = ""
+                    for chunk in output:
+                        if 'choices' in chunk and len(chunk['choices']) > 0:
+                            delta = chunk['choices'][0].get('text', '')
+                            if delta:
+                                translated_text += delta
+                    
+                    translated_paragraphs.append(translated_text)
+                    logger.info(f"第{i+1}/{len(paragraphs)}段翻译完成")
+                except Exception as e:
+                    logger.error(f"翻译第{i+1}段时出错: {str(e)}")
+                    translated_paragraphs.append(paragraph)  # 翻译失败时保留原文
+            
+            # 合并翻译结果
+            final_text = '\n'.join(translated_paragraphs)
+            
+            return {
+                "success": True,
+                "translated_text": final_text,
+                "source_lang": "auto",
+                "target_lang": "zh"
+            }
+        except Exception as e:
+            logger.error(f"分段翻译失败: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "error": f"分段翻译失败: {str(e)}"
+            }
+
     async def translate_with_baidu(self, text: str, source_lang: str = "auto", target_lang: str = "zh") -> Dict[str, str]:
         """
         使用百度翻译API进行翻译
@@ -272,6 +405,16 @@ class Translator:
             path = '/api/trans/vip/translate'
             url = endpoint + path
             
+            # 检查文本长度，如果太长则分段翻译
+            # 百度API限制：单次请求的URL长度不能超过2048字符
+            # 估算：每个中文字符约2-3字节，英文约1字节
+            # 为了安全，每段不超过1500字符
+            max_chars_per_request = 1500
+            
+            if len(text) > max_chars_per_request:
+                logger.info(f"文本过长（{len(text)}字符），将分段翻译")
+                return await self._translate_baidu_in_chunks(text, appid, appkey, from_lang, to_lang, url, max_chars_per_request)
+            
             # 生成salt和sign
             def make_md5(s, encoding='utf-8'):
                 return md5(s.encode(encoding)).hexdigest()
@@ -291,8 +434,42 @@ class Translator:
             }
             
             # 发送请求
+            logger.info(f"发送百度翻译请求，文本长度: {len(text)}")
             response = requests.post(url, params=payload, headers=headers, timeout=10)
-            result = response.json()
+            logger.info(f"百度翻译API响应状态码: {response.status_code}")
+            
+            # 检查响应状态
+            if response.status_code != 200:
+                logger.error(f"百度翻译API返回错误状态码: {response.status_code}")
+                return {
+                    "success": False,
+                    "error": f"百度翻译API返回错误状态码: {response.status_code}"
+                }
+            
+            # 检查响应内容
+            response_text = response.text.strip()
+            logger.info(f"百度翻译API响应内容长度: {len(response_text)}")
+            
+            if not response_text:
+                logger.error("百度翻译API返回空响应")
+                return {
+                    "success": False,
+                    "error": "百度翻译API返回空响应"
+                }
+            
+            # 记录响应内容的前500个字符用于调试
+            logger.info(f"百度翻译API响应内容预览: {response_text[:500]}")
+            
+            # 尝试解析JSON
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                logger.error(f"百度翻译API返回非JSON格式: {response_text[:200]}")
+                logger.error(f"JSON解析错误详情: {str(e)}")
+                return {
+                    "success": False,
+                    "error": f"百度翻译API返回非JSON格式: {str(e)}"
+                }
             
             # 检查错误
             if 'error_code' in result:
@@ -331,6 +508,114 @@ class Translator:
             return {
                 "success": False,
                 "error": str(e)
+            }
+    
+    async def _translate_baidu_in_chunks(self, text: str, appid: str, appkey: str, from_lang: str, to_lang: str, url: str, max_chars: int) -> Dict[str, str]:
+        """
+        分段翻译长文本（百度API）
+        """
+        try:
+            import requests
+            import random
+            from hashlib import md5
+            import json
+            
+            # 按段落分段（按换行符分割）
+            paragraphs = []
+            current_chunk = ""
+            
+            # 按行分割，保留段落结构
+            lines = text.split('\n')
+            for line in lines:
+                # 估算当前chunk的字符数
+                estimated_chunk_chars = len(current_chunk + line)
+                
+                if estimated_chunk_chars > max_chars * 0.8:  # 留20%余量给其他参数
+                    if current_chunk.strip():
+                        paragraphs.append(current_chunk.strip())
+                    current_chunk = line + "\n"
+                else:
+                    current_chunk += line + "\n"
+            
+            # 添加最后一个chunk
+            if current_chunk.strip():
+                paragraphs.append(current_chunk.strip())
+            
+            logger.info(f"文本分为{len(paragraphs)}段进行翻译")
+            
+            # 翻译每一段
+            translated_paragraphs = []
+            def make_md5(s, encoding='utf-8'):
+                return md5(s.encode(encoding)).hexdigest()
+            
+            for i, paragraph in enumerate(paragraphs):
+                if not paragraph.strip():
+                    translated_paragraphs.append("")
+                    continue
+                
+                try:
+                    # 生成salt和sign
+                    salt = random.randint(32768, 65536)
+                    sign = make_md5(appid + paragraph + str(salt) + appkey)
+                    
+                    # 构建请求
+                    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+                    payload = {
+                        'appid': appid,
+                        'q': paragraph,
+                        'from': from_lang,
+                        'to': to_lang,
+                        'salt': salt,
+                        'sign': sign
+                    }
+                    
+                    # 发送请求
+                    logger.info(f"发送百度翻译请求（第{i+1}/{len(paragraphs)}段），文本长度: {len(paragraph)}")
+                    response = requests.post(url, params=payload, headers=headers, timeout=10)
+                    
+                    # 检查响应状态
+                    if response.status_code != 200:
+                        logger.error(f"翻译第{i+1}段时出错，状态码: {response.status_code}")
+                        translated_paragraphs.append(paragraph)  # 翻译失败时保留原文
+                        continue
+                    
+                    # 解析响应
+                    response_text = response.text.strip()
+                    result = json.loads(response_text)
+                    
+                    # 检查错误
+                    if 'error_code' in result:
+                        logger.error(f"翻译第{i+1}段时出错: {result.get('error_msg')}")
+                        translated_paragraphs.append(paragraph)  # 翻译失败时保留原文
+                        continue
+                    
+                    # 提取翻译结果
+                    if 'trans_result' in result and len(result['trans_result']) > 0:
+                        translated_text = result['trans_result'][0].get('dst', '')
+                        translated_paragraphs.append(translated_text)
+                        logger.info(f"第{i+1}/{len(paragraphs)}段翻译完成")
+                    else:
+                        logger.error(f"翻译第{i+1}段时出错: 返回格式错误")
+                        translated_paragraphs.append(paragraph)  # 翻译失败时保留原文
+                        
+                except Exception as e:
+                    logger.error(f"翻译第{i+1}段时出错: {str(e)}")
+                    translated_paragraphs.append(paragraph)  # 翻译失败时保留原文
+            
+            # 合并翻译结果
+            final_text = '\n'.join(translated_paragraphs)
+            
+            return {
+                "success": True,
+                "translated_text": final_text,
+                "source_lang": from_lang,
+                "target_lang": to_lang
+            }
+        except Exception as e:
+            logger.error(f"百度分段翻译失败: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "error": f"百度分段翻译失败: {str(e)}"
             }
     
     def set_inference_mode(self, mode: str):
@@ -581,6 +866,222 @@ class Translator:
                 "success": False,
                 "error": str(e)
             }
+
+    async def translate_pdf_stream(self, pdf_path: str, source_lang: str, target_lang: str, provider: str, save_path: str, smart_layout: bool = True):
+        """
+        流式翻译PDF文件(保持排版)，产生进度事件
+        """
+        import os
+        import json
+        import fitz  # pymupdf
+        import platform
+        
+        try:
+            # 1. 打开PDF文件
+            doc = fitz.open(pdf_path)
+            total_pages = len(doc)
+            
+            yield json.dumps({
+                "type": "progress", 
+                "stage": "analyzing", 
+                "total_pages": total_pages,
+                "message": f"正在分析PDF排版，共 {total_pages} 页..."
+            }) + "\n"
+            
+            # 2. 遍历每一页进行处理
+            for page_num in range(total_pages):
+                page = doc[page_num]
+                
+                # 获取页面信息（字典模式，包含字体信息）
+                # 'dict' returns: {width, height, blocks: [{type, bbox, lines: [{spans: [{size, font, color, text, bbox...}]}]}]}
+                page_dict = page.get_text("dict")
+                blocks = page_dict.get("blocks", [])
+                
+                # 过滤出文本块
+                text_blocks = [b for b in blocks if b.get("type", 0) == 0]
+                
+                # 按垂直(y0)主要排序，水平(x0)次要排序，确保阅读顺序
+                text_blocks.sort(key=lambda b: (b["bbox"][1], b["bbox"][0]))
+                
+                total_blocks = len(text_blocks)
+                
+                # 发送页面开始事件
+                msg = f"正在翻译第 {page_num + 1}/{total_pages} 页..."
+                logger.info(msg)
+                yield json.dumps({
+                    "type": "progress", 
+                    "stage": "translating", 
+                    "current_page": page_num + 1, 
+                    "total_pages": total_pages,
+                    "total_segments": total_blocks,
+                    "current_segment": 0,
+                    "message": f"正在翻译第 {page_num + 1}/{total_pages} 页..."
+                }) + "\n"
+                
+                # 确定中文字体路径
+                font_path = None
+                system = platform.system()
+                if system == "Windows":
+                    font_paths = ["C:\\Windows\\Fonts\\msyh.ttc", "C:\\Windows\\Fonts\\simhei.ttf"]
+                    for p in font_paths:
+                        if os.path.exists(p):
+                            font_path = p
+                            break
+                elif system == "Darwin":
+                    font_path = "/System/Library/Fonts/PingFang.ttc"
+                else: # Linux
+                    font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+                
+                # 如果找不到系统字体，尝试使用内置字体（可能不支持中文但能运行）
+                if not font_path or not os.path.exists(font_path):
+                     fontname = "china-ss" # pymupdf内置简体中文字体别名 (宋体)
+                     fontfile = None
+                else:
+                     fontname = "custom-font"
+                     fontfile = font_path
+
+                # 逐个块处理
+                for i, block in enumerate(text_blocks):
+                    bbox = block["bbox"]
+                    x0, y0, x1, y1 = bbox
+                    
+                    # 提取文本并分析各行字体
+                    block_text = ""
+                    font_sizes = []
+                    
+                    for line in block.get("lines", []):
+                        line_text = ""
+                        for span in line.get("spans", []):
+                            line_text += span.get("text", "")
+                            if smart_layout:
+                                font_sizes.append(span.get("size", 10))
+                        block_text += line_text + "\n"
+                        
+                    text = block_text.strip()
+                    if not text:
+                        continue
+                     
+                    # 发送当前块开始翻译事件
+                    msg = f"正在翻译第 {page_num + 1}/{total_pages} 页 (块 {i+1}/{total_blocks})..."
+                    if i % 5 == 0:
+                        logger.info(msg)
+                    
+                    yield json.dumps({
+                        "type": "progress", 
+                        "stage": "translating", 
+                        "current_page": page_num + 1, 
+                        "total_pages": total_pages,
+                        "current_segment": i + 1,
+                        "total_segments": total_blocks,
+                        "message": f"正在翻译第 {page_num + 1}/{total_pages} 页 (块 {i+1}/{total_blocks})..."
+                    }) + "\n"
+                        
+                    # 翻译文本块
+                    try:
+                        result = await self.translate(text, source_lang, target_lang, provider)
+                        if result["success"]:
+                            translated_text = result["translated_text"]
+                            
+                            # 替换文本
+                            # 1. 删除原内容
+                            rect = fitz.Rect(x0, y0, x1, y1)
+                            page.add_redact_annot(rect, fill=(1, 1, 1)) # 使用白色填充删除区域
+                            page.apply_redactions()
+                            
+                            # 2. 写入新文本
+                            # 需要注册字体
+                            if fontfile:
+                                page.insert_font(fontname=fontname, fontfile=fontfile)
+                            
+                            # 确定目标字号
+                            target_fontsize = 10 # 默认
+                            if smart_layout and font_sizes:
+                                # 取出现次数最多的字号作为基准
+                                try:
+                                    target_fontsize = max(set(font_sizes), key=font_sizes.count)
+                                    # 翻译为中文通常更紧凑，稍微减小一点点以防溢出，但如果是标题(>14)则保留
+                                    if target_fontsize < 14:
+                                        target_fontsize = max(6, target_fontsize - 1)
+                                except:
+                                    pass
+                            
+                            # 尝试多次插入，调节字体大小
+                            inserted = False
+                            # 尝试从目标字号开始向下尝试
+                            start_size = int(target_fontsize) if smart_layout else 10
+                            # 确保至少尝试到 6
+                            sizes_to_try = list(range(start_size, 5, -1))
+                            if not sizes_to_try: # if start_size is small
+                                sizes_to_try = [start_size]
+                            
+                            for fontsize in sizes_to_try:
+                                ret = page.insert_textbox(rect, translated_text, fontname=fontname, fontsize=fontsize, align=0, color=(0, 0, 0))
+                                if ret >= 0:
+                                    inserted = True
+                                    break
+                            
+                            if not inserted:
+                                logger.warning(f"Page {page_num+1} Block {i} 文本过长无法完整放入框内: {translated_text[:20]}...")
+                                # forcefully insert with smallest font
+                                page.insert_textbox(rect, translated_text, fontname=fontname, fontsize=5, align=0, color=(0, 0, 0))
+                            
+                        else:
+                            logger.error(f"Page {page_num+1} Block {i} translation failed: {result.get('error')}")
+                    except Exception as e:
+                        logger.error(f"Page {page_num+1} Block {i} error: {e}")
+            
+            # 3. 保存新文件
+            yield json.dumps({
+                "type": "progress", 
+                "stage": "generating", 
+                "message": "正在保存PDF文件..."
+            }) + "\n"
+            
+            # 使用临时文件保存以支持覆盖原文件（非增量保存需要）
+            temp_save_path = f"{save_path}.tmp"
+            try:
+                # 使用垃圾回收和压缩保存
+                doc.save(temp_save_path, garbage=4, deflate=True)
+                doc.close()
+                
+                # 移动/覆盖文件
+                if os.path.exists(save_path):
+                     os.remove(save_path)
+                os.rename(temp_save_path, save_path)
+                
+            except Exception as e:
+                # 如果出错，尝试清理临时文件
+                if os.path.exists(temp_save_path):
+                    try:
+                        os.remove(temp_save_path)
+                    except:
+                        pass
+                raise e # 重新抛出异常给外层处理
+            
+            yield json.dumps({
+                "type": "complete", 
+                "success": True, 
+                "save_path": save_path,
+                "message": "翻译完成"
+            }) + "\n"
+            
+        except ImportError:
+             logger.error("pymupdf库未安装")
+             yield json.dumps({
+                "type": "error", 
+                "error": "pymupdf库未安装，请运行 pip install pymupdf"
+            }) + "\n"
+        except Exception as e:
+            logger.error(f"PDF流式翻译(排版保留)失败: {str(e)}", exc_info=True)
+            yield json.dumps({
+                "type": "error", 
+                "error": str(e),
+                "message": f"处理出错: {str(e)}"
+            }) + "\n"
+
+    # 以下旧方法保留作为备用或删除
+    # extract_and_segment_pdf 和 create_pdf_from_text 不再被翻译流程主要调用
+
 
 # 全局翻译器实例
 translator = Translator()
